@@ -1,59 +1,44 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <errno.h>
-#define MAX_CMD_LENGTH 256
+#include "shell.h"
+
 /**
  * main - entry point
- * @argc: number of arguments
- * @argv: arguments to be passed
- * Return: Always 0
+ * @ac: arg count
+ * @av: arg vector
+ *
+ * Return: 0 on success, 1 on error
  */
-int main(int argc, char *argv[])
+int main(int ac, char **av)
 {
-	char cmd[MAX_CMD_LENGTH];
-	int status;
-	pid_t pid;
-	pid_t waitpid(pid_t pid, int *wstatus, int options);
-	int execve(const char *pathname, char *const argv[], char *const envp[]);
-	extern char **environ;
+	info_t info[] = { INFO_INIT };
+	int fd = 2;
 
-	while (1)
+	asm ("mov %1, %0\n\t"
+		"add $3, %0"
+		: "=r" (fd)
+		: "r" (fd));
+
+	if (ac == 2)
 	{
-		printf("$ ");
-
-		if (fgets(cmd, MAX_CMD_LENGTH, stdin) == NULL)
+		fd = open(av[1], O_RDONLY);
+		if (fd == -1)
 		{
-
-			printf("\n");
-			exit(EXIT_SUCCESS);
-		}
-
-		cmd[strcspn(cmd, "\n")] = '\0';
-
-		pid = fork();
-
-		if (pid < 0)
-		{
-			perror("fork");
-			exit(EXIT_FAILURE);
-		}
-		else if (pid == 0)
-		{
-			char *args[] = {cmd, NULL};
-
-			execve(cmd, args, environ);
-			perror(cmd);
-			exit(EXIT_FAILURE);
-		}
-		else
-		{
-			do {
-				waitpid(pid, &status, WUNTRACED);
+			if (errno == EACCES)
+				exit(126);
+			if (errno == ENOENT)
+			{
+				_eputs(av[0]);
+				_eputs(": 0: Can't open ");
+				_eputs(av[1]);
+				_eputchar('\n');
+				_eputchar(BUF_FLUSH);
+				exit(127);
 			}
-		while (!WIFEXITED(status) && !WIFSIGNALED(status));
+			return (EXIT_FAILURE);
 		}
+		info->readfd = fd;
 	}
-	return (0);
+	populate_env_list(info);
+	read_history(info);
+	hsh(info, av);
+	return (EXIT_SUCCESS);
 }
